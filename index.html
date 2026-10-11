@@ -549,6 +549,11 @@
   .mkind { font-size: 11.5px; color: var(--ink-soft); font-weight: 700; width: 46px; flex-shrink: 0; }
   .mrow .linkbtn { margin: 0; padding: 4px 2px; font-size: 12.5px; flex-shrink: 0; }
   .mrow.arch { opacity: .5; }
+  .mmove { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .mmove button { font-size: 10px; line-height: 1; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
+  .mmove button:disabled { opacity: .3; cursor: default; }
+  .sheet .mrow select.mkind-sel { width: auto !important; flex: 0 0 auto; min-width: 0; }
+  .mkind-sel { font: inherit; font-size: 12.5px; padding: 4px 4px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); flex-shrink: 0; }
 
 
   .monthchips { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 8px; }
@@ -614,6 +619,9 @@
   .av img, .gav img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
   .av.has-img { background: var(--panel) !important; overflow: hidden; }
   #gate .gate-box { text-align: center; max-width: 420px; width: 100%; }
+  .who-pick { display: grid; gap: 14px; justify-items: center; margin-top: 6px; }
+  #gate #whoSel { width: 100%; max-width: 300px; font: inherit; font-size: 18px; font-weight: 700; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); text-align: center; text-align-last: center; cursor: pointer; }
+  .gav-blank { background: var(--gold-soft) !important; font-size: 30px; }
   .who-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; margin-top: 8px; }
   .who-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 8px 10px; font: inherit; color: var(--ink); cursor: pointer; }
   .who-tile:hover, .who-tile:focus-visible { border-color: var(--gold); }
@@ -785,7 +793,10 @@
 <div id="gate"><div id="whoForm" class="gate-box">
   <div class="plaque"><img src="logo.webp" alt="The Danforth House"></div>
   <p>Welcome home. Who's here?</p>
-  <div class="who-grid" id="whoGrid"></div>
+  <div class="who-pick">
+    <div class="gate-who" id="whoAv"></div>
+    <select id="whoSel" aria-label="Choose your name"></select>
+  </div>
   <div id="whoMsg" role="status"></div>
 </div>
 <form id="gateForm" autocomplete="off" hidden>
@@ -2936,9 +2947,12 @@ function showWho(msg) {
   document.getElementById('gate').classList.add('open');
   gateForm.hidden = true; resetForm.hidden = true; whoForm.hidden = false;
   whoMsg.textContent = msg || '';
-  whoGrid.innerHTML = people().map(p => `<button type="button" class="who-tile" data-who="${p.id}">${gateAvatar(p)}<b>${esc(p.name)}</b><small>${p.owner ? 'Owner' : p.role === 'child' ? 'Child' : ''}</small></button>`).join('')
-    || '<div class="hint2">Connect to the internet to load your family.</div>';
-  whoGrid.querySelectorAll('[data-who]').forEach(b => b.onclick = () => showPin(b.dataset.who));
+  const ppl = people();
+  whoAv.innerHTML = `<span class="gav gav-blank">🏡</span>`;
+  whoSel.hidden = !ppl.length;
+  whoSel.innerHTML = `<option value="">Choose your name…</option>` + ppl.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  if (!ppl.length) whoMsg.textContent = msg || 'Connect to the internet to load your family.';
+  whoSel.onchange = () => { if (whoSel.value) showPin(whoSel.value); };
 }
 function showPin(id, msg, mode = 'unlock') {
   pickedId = id; pinMode = mode;
@@ -3293,21 +3307,28 @@ function themeOptions(withAuto) {
 function renderMembers() {
   const ms = draftPrefs.members;
   memberList.innerHTML = ms.map((m, i) => `<div class="mrow ${m.archived ? 'arch' : ''}">
+      <span class="mmove"><button type="button" data-up="${i}" aria-label="Move ${esc(m.name)} up" ${i === 0 ? 'disabled' : ''}>▲</button><button type="button" data-down="${i}" aria-label="Move ${esc(m.name)} down" ${i === ms.length - 1 ? 'disabled' : ''}>▼</button></span>
       <input type="color" value="${m.color}" data-mc="${i}" aria-label="Color for ${esc(m.name)}">
       <input class="mic" value="${esc(m.icon || '')}" maxlength="2" data-mi="${i}" placeholder="${esc((m.name || '?')[0])}" aria-label="Icon or emoji">
       <input class="mname" value="${esc(m.name)}" maxlength="24" data-mn="${i}" aria-label="Name">
-      <span class="mkind">${m.kind === 'pet' ? 'Pet' : m.kind === 'group' ? 'Group' : 'Person'}</span>
-      <button type="button" class="linkbtn" data-march="${i}">${m.archived ? 'Bring back' : 'Remove'}</button></div>`).join('');
+      ${m.kind === 'person' || !m.kind ? `<select class="mkind-sel" data-mrole="${i}" aria-label="Adult or child" ${m.id === OWNER_ID ? 'disabled' : ''}><option value="adult" ${(m.role || roleOf(m.id)) !== 'child' ? 'selected' : ''}>Adult</option><option value="child" ${(m.role || roleOf(m.id)) === 'child' ? 'selected' : ''}>Child</option></select>`
+        : `<span class="mkind">${m.kind === 'pet' ? 'Pet' : 'Group'}</span>`}
+      <button type="button" class="linkbtn" data-march="${i}" ${m.id === OWNER_ID ? 'disabled title="The owner can\'t be removed"' : ''}>${m.archived ? 'Bring back' : 'Remove'}</button></div>`).join('');
   memberList.querySelectorAll('[data-mc]').forEach(x => x.oninput = () => { ms[x.dataset.mc].color = x.value; if (draftPrefs.colors) delete draftPrefs.colors[ms[x.dataset.mc].id]; });
   memberList.querySelectorAll('[data-mi]').forEach(x => x.oninput = () => { ms[x.dataset.mi].icon = x.value.trim(); });
   memberList.querySelectorAll('[data-mn]').forEach(x => x.oninput = () => { ms[x.dataset.mn].name = x.value.trim() || ms[x.dataset.mn].name; });
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= ms.length) return; [ms[i], ms[j]] = [ms[j], ms[i]]; renderMembers();
+    const b = memberList.querySelector(`[data-${d < 0 ? 'up' : 'down'}="${j}"]`) || memberList.querySelector(`[data-${d < 0 ? 'down' : 'up'}="${j}"]`); if (b) b.focus(); };
+  memberList.querySelectorAll('[data-up]').forEach(x => x.onclick = () => move(Number(x.dataset.up), -1));
+  memberList.querySelectorAll('[data-down]').forEach(x => x.onclick = () => move(Number(x.dataset.down), 1));
+  memberList.querySelectorAll('[data-mrole]').forEach(x => x.onchange = () => { ms[x.dataset.mrole].role = x.value; });
   memberList.querySelectorAll('[data-march]').forEach(x => x.onclick = () => { const m = ms[x.dataset.march]; m.archived = !m.archived; renderMembers(); });
 }
 function addMember(kind) {
   const PALETTE = ['#E4875B', '#8E6CC8', '#3FA6A0', '#C45B7A', '#7A9A3A', '#B8864B', '#D95F4B', '#6E7FA8', '#A7C957', '#E9A0C9'];
   const used = draftPrefs.members.map(m => m.color.toLowerCase());
   const color = PALETTE.find(c => !used.includes(c.toLowerCase())) || PALETTE[draftPrefs.members.length % PALETTE.length];   // a color nobody has yet
-  draftPrefs.members.push({ id: (kind === 'pet' ? 'pet' : 'p') + Date.now().toString(36), name: kind === 'pet' ? 'New pet' : 'New person', kind, color, icon: kind === 'pet' ? '🐾' : '' });
+  draftPrefs.members.push({ id: (kind === 'pet' ? 'pet' : 'p') + Date.now().toString(36), name: kind === 'pet' ? 'New pet' : 'New person', kind, color, icon: kind === 'pet' ? '🐾' : '', ...(kind === 'person' ? { role: 'adult' } : {}) });
   renderMembers();
   const last = memberList.querySelector('.mrow:last-child .mname'); if (last) { last.focus(); last.select(); }
 }
@@ -3347,7 +3368,14 @@ document.getElementById('sp_add').onclick = () => {
   sp_msg.value = ''; sp_start.value = ''; sp_end.value = ''; renderPersonalize();
 };
 document.getElementById('pz_save').onclick = async () => {
-  if (await savePrefsPatch(draftPrefs)) { closeSheets(); toast('🎨 Saved for the whole family'); }
+  const before = new Set((ROSTER || []).map(r => r.id));
+  const fresh = (draftPrefs.members || []).filter(m => (m.kind || 'person') === 'person' && !m.archived && !before.has(m.id));
+  if (await savePrefsPatch(draftPrefs)) {
+    closeSheets();
+    try { ROSTER = await call('roster'); LS.set('roster', ROSTER); } catch (e) {}
+    if (fresh.length) { toast(`🎨 Saved — now set ${fresh.map(m => m.name).join(' & ')}'s PIN`); openFamily(); }
+    else toast('🎨 Saved for the whole family');
+  }
 };
 
 /* ================= Photos ================= */
